@@ -199,10 +199,10 @@ def process_batch(args: tuple) -> list[list[str]]:
         success = False
         # Решаем, что делать с файлом
         if source_path in full_move_csvs:
-            # Если файлы из CSV, которые нужно все переместить/копировать
+            # Если файлы из CSV, которые нужно все переместить
             success = convert_audio_ffmpeg(source_path, target_path, None, switch_copy_move)
         elif file_ext in move_formats:
-            # Если файл с таким форматом нужно переместить/копировать
+            # Если файл с таким форматом нужно переместить
             success = convert_audio_ffmpeg(source_path, target_path, None, switch_copy_move)
         elif file_ext in convert_formats:
             # Если файл с таким форматом нужно конвертировать
@@ -213,7 +213,7 @@ def process_batch(args: tuple) -> list[list[str]]:
     return results
 
 
-def csv_save_worker(output_csv: str, result_queue: queue.Queue, headers: list):
+def csv_save_worker(output_csv: str, result_queue: queue.Queue, headers: list, delimiter: str):
     """
     Рабочий поток для сохранения CSV-файла в реальном времени
     
@@ -223,7 +223,7 @@ def csv_save_worker(output_csv: str, result_queue: queue.Queue, headers: list):
         headers (list): Заголовки CSV-файла
     """
     with open(output_csv, 'w', encoding='utf-8', newline='') as f:
-        csv_writer = csv.writer(f, delimiter='|')
+        csv_writer = csv.writer(f, delimiter=delimiter)
         csv_writer.writerow(headers)
         
         while True:
@@ -250,7 +250,7 @@ def chunks(lst: list, n: int) -> list:
         yield lst[i:i + n]
 
 
-def read_csv_files(csv_files: list[str], full_move_csvs: list[str], duplicate_index: int) -> tuple[list, dict, list, list]:
+def read_csv_files(csv_files: list[str], full_move_csvs: list[str], duplicate_index: int, delimiter: str) -> tuple[list, dict, list, list]:
     """
     Читает несколько CSV файлов, удаляет дубликаты и возвращает обработанные строки
 
@@ -276,7 +276,7 @@ def read_csv_files(csv_files: list[str], full_move_csvs: list[str], duplicate_in
     for csv_file in csv_files:
         try:
             if duplicate_index:
-                df = pd.read_csv(csv_file, delimiter="|")
+                df = pd.read_csv(csv_file, delimiter=delimiter)
                 total_entries_in_file = len(df)
 
                 # Удаляем дубликаты, сохраняя первое вхождение по столбцу с указаным индексом
@@ -301,12 +301,13 @@ def read_csv_files(csv_files: list[str], full_move_csvs: list[str], duplicate_in
                     formats_found.add(file_ext)
                     file_counts[file_ext] = file_counts.get(file_ext, 0) + 1
             else:
-                df = pd.read_csv(csv_file, delimiter="|")
+                df = pd.read_csv(csv_file, delimiter=delimiter)
                 total_entries_in_file = len(df)
 
                 print(f" - Файл {os.path.basename(csv_file)}:")
                 print(f"   Всего записей: {total_entries_in_file}")
 
+                # Преобразуем обратно в список списков для совместимости с оригинальным кодом
                 for row in df.values.tolist():
                     rows.append((len(rows), row))
 
@@ -344,6 +345,7 @@ def main():
     parser.add_argument('csv_files', nargs='+', help='Путь к CSV файлам')
     parser.add_argument('-o', '--output', default='audio_directory', help='Базовая директория для вывода')
     parser.add_argument('-oc', '--output-csv', default='metadata.csv', help='Имя выходного CSV файла')
+    parser.add_argument('-de', '--delimiter', type=str, default="|", help='Разделитель в CSV-файлах')
     parser.add_argument('-hd', '--headers', nargs='*', default=['audio_path', 'text', 'duration'], help='Заголовки для выходного CSV')
     parser.add_argument('-l', '--levels', nargs='*', type=int, default=[16], help='Конфигурация уровней структуры директорий')
     parser.add_argument('-c', '--convert', nargs='*', default=None, help='Форматы файлов для конвертации')
@@ -368,7 +370,7 @@ def main():
     
     print("Чтение входных CSV файлов...")
     rows, file_counts, full_move_sources, found_formats = read_csv_files(
-        args.csv_files, args.full_move, args.duplicate_index
+        args.csv_files, args.full_move, args.duplicate_index, args.delimiter
     )
     
     # Если форматы не указаны, используем найденные в CSV для конвертации
@@ -385,6 +387,7 @@ def main():
     print(f" - Перемещение форматов: {args.move}")
     print(f" - Полное перемещение из CSV: {args.full_move}")
     print(f" - Параметры ffmpeg: {args.ffmpeg}")
+    print(f' - Разделитель в CSV-файлах: "{args.delimiter}"')
     print(f" - Конфигурация уровней структуры директорий: {args.levels}")
     print(f" - Удаление дубликатов: {'Включено' if args.duplicate_index else 'Выключено'}")
     print(f" - Копирование/перемещение: {'Перемещение' if args.switch_copy_move else 'Копирование'}")
@@ -404,7 +407,7 @@ def main():
         args.switch_copy_move
     ) for batch in batches]
     
-    # Количество процессов
+    # Оптимальное количество процессов
     num_processes = args.cpu
     
     # Подготовка для сохранения CSV в реальном времени
@@ -414,7 +417,7 @@ def main():
     if args.csv_save_realtime:
         csv_thread = threading.Thread(
             target=csv_save_worker, 
-            args=(output_csv, result_queue, args.headers)
+            args=(output_csv, result_queue, args.headers, args.delimiter)
         )
         csv_thread.start()
     
@@ -444,7 +447,7 @@ def main():
     if not args.csv_save_realtime:
         print("Сохранение результатов...")
         with open(output_csv, 'w', encoding='utf-8', newline='') as f:
-            csv_writer = csv.writer(f, delimiter='|')
+            csv_writer = csv.writer(f, delimiter=args.delimiter)
             csv_writer.writerow(args.headers)
             csv_writer.writerows(results)
     with open("error.log", "r") as error_file:
