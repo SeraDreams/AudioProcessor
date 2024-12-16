@@ -108,7 +108,10 @@ python audio_processor.py input.csv \
 /path/to/audio1.wav|Привет, мир|3.5
 /path/to/audio2.mp3|Доброе утро|2.7
 ```
-Всегда в первом столбце должны быть пути к аудиофайлам
+Обязательные:
+- Всегда в первом столбце должны быть пути к аудиофайлам.
+Необязательные:
+- Всё остальное.
 
 ## Примеры
 
@@ -132,3 +135,6 @@ python audio_processor.py train.csv validation.csv \
 python audio_processor.py dataset.csv -fm dataset.csv -o moved_dataset
 ```
 Перемещает все файлы, указанные в dataset.csv, в директорию moved_dataset без конвертации.
+
+## В планах
+- Добавить подсчёт длительности аудио
