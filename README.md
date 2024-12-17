@@ -139,3 +139,4 @@ python audio_processor.py dataset.csv -fm dataset.csv -o moved_dataset
 
 ## В планах
 - Добавить подсчёт длительности аудио
+- Добавить распознование голоса в аудио
